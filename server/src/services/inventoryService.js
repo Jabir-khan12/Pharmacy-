@@ -4,16 +4,23 @@ import Batch from '../models/Batch.js';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
 
+export const supportsTransactions = () => {
+  const topologyType = mongoose.connection.getClient()?.topology?.description?.type;
+  return topologyType === 'ReplicaSet' || topologyType === 'Sharded';
+};
+
 export const updateStock = async (medicineId, quantity, type, performedBy, referenceId = null, referenceModel = null, notes = '', session = null) => {
-  const sessionToUse = session || await mongoose.startSession();
-  const shouldCommit = !session;
+  const shouldUseTransaction = !session && supportsTransactions();
+  const sessionToUse = session || (shouldUseTransaction ? await mongoose.startSession() : null);
+  const shouldCommit = Boolean(sessionToUse) && !session;
 
   try {
     if (shouldCommit) {
       await sessionToUse.startTransaction();
     }
 
-    const medicine = await Medicine.findById(medicineId).session(sessionToUse);
+    const medicineQuery = Medicine.findById(medicineId);
+    const medicine = sessionToUse ? await medicineQuery.session(sessionToUse) : await medicineQuery;
 
     if (!medicine) {
       throw new AppError('Medicine not found', 404);
@@ -26,9 +33,9 @@ export const updateStock = async (medicineId, quantity, type, performedBy, refer
     }
 
     medicine.stockQuantity = newStockQuantity;
-    await medicine.save({ session: sessionToUse });
+    await medicine.save(sessionToUse ? { session: sessionToUse } : undefined);
 
-    await StockTransaction.create([{
+    const transactionData = [{
       medicine: medicineId,
       type,
       quantity,
@@ -37,7 +44,8 @@ export const updateStock = async (medicineId, quantity, type, performedBy, refer
       referenceId,
       referenceModel,
       notes
-    }], { session: sessionToUse });
+    }];
+    await StockTransaction.create(transactionData, sessionToUse ? { session: sessionToUse } : undefined);
 
     if (shouldCommit) {
       await sessionToUse.commitTransaction();

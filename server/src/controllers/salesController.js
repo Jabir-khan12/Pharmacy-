@@ -1,4 +1,6 @@
 import Sale from '../models/Sale.js';
+import Return from '../models/Return.js';
+import Batch from '../models/Batch.js';
 import Medicine from '../models/Medicine.js';
 import AppError from '../utils/AppError.js';
 import { createSaleTransaction } from '../services/salesService.js';
@@ -6,7 +8,12 @@ import PDFDocument from 'pdfkit';
 
 export const createSale = async (req, res, next) => {
   try {
-    const { customer, items, paymentMethod, prescription, notes, discount, taxRate } = req.body;
+    const { customer: requestedCustomer, items, paymentMethod, prescription, notes, discount, taxRate } = req.body;
+    const customer = {
+      ...requestedCustomer,
+      name: requestedCustomer?.name?.trim() || 'Walk-in customer',
+      phone: requestedCustomer?.phone?.trim() || ''
+    };
 
     if (!items || items.length === 0) {
       return next(new AppError('Sale must contain at least one item', 400));
@@ -30,13 +37,14 @@ export const createSale = async (req, res, next) => {
         medicineName: medicine.name,
         quantity: item.quantity,
         priceAtSale: medicine.price,
+        costAtSale: (await Batch.findOne({ medicine: medicine._id }).sort({ createdAt: 1 }))?.costPrice ?? null,
         subtotal
       });
     }
 
     // Calculate discount
     let discountAmount = 0;
-    const discountType = discount?.type || 'fixed';
+    const discountType = discount?.type || 'percentage';
     const discountValue = parseFloat(discount?.value) || 0;
 
     if (discountType === 'percentage') {
@@ -76,6 +84,63 @@ export const createSale = async (req, res, next) => {
       success: true,
       message: 'Sale created successfully',
       data: { sale: populatedSale }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getSalesSummary = async (req, res, next) => {
+  try {
+    const { period = 'day', date } = req.query;
+    const anchor = date ? new Date(`${date}T12:00:00`) : new Date();
+    let startDate;
+    let endDate;
+
+    if (period === 'year') {
+      startDate = new Date(anchor.getFullYear(), 0, 1);
+      endDate = new Date(anchor.getFullYear() + 1, 0, 1);
+    } else if (period === 'month') {
+      startDate = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+      endDate = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 1);
+    } else {
+      startDate = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
+      endDate = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + 1);
+    }
+
+    const match = { createdAt: { $gte: startDate, $lt: endDate }, status: { $ne: 'returned' } };
+    if (req.user.role === 'customer') match['customer.userId'] = req.user._id;
+
+    const [summary] = await Sale.aggregate([
+      { $match: match },
+      { $unwind: '$items' },
+      { $group: {
+        _id: '$_id',
+        revenue: { $first: { $ifNull: ['$grandTotal', '$totalAmount'] } },
+        itemsSold: { $sum: '$items.quantity' },
+        estimatedCost: { $sum: { $multiply: ['$items.quantity', { $ifNull: ['$items.costAtSale', { $multiply: ['$items.priceAtSale', 0.6] }] }] } }
+      } },
+      { $group: {
+        _id: null,
+        transactionCount: { $sum: 1 },
+        revenue: { $sum: '$revenue' },
+        itemsSold: { $sum: '$itemsSold' },
+        estimatedCost: { $sum: '$estimatedCost' }
+      } }
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        period,
+        startDate,
+        endDate,
+        transactionCount: summary?.transactionCount || 0,
+        revenue: summary?.revenue || 0,
+        itemsSold: summary?.itemsSold || 0,
+        estimatedCost: summary?.estimatedCost || 0,
+        estimatedProfit: (summary?.revenue || 0) - (summary?.estimatedCost || 0)
+      }
     });
   } catch (error) {
     next(error);
@@ -151,9 +216,13 @@ export const getSaleById = async (req, res, next) => {
       return next(new AppError('Not authorized to view this sale', 403));
     }
 
+    const returnHistory = await Return.find({ originalSale: sale._id })
+      .select('returnNumber status items.quantity items.medicine items.medicineName createdAt')
+      .sort({ createdAt: -1 });
+
     res.status(200).json({
       success: true,
-      data: { sale }
+      data: { sale: { ...sale.toObject(), returnHistory } }
     });
   } catch (error) {
     next(error);
@@ -220,13 +289,6 @@ export const generateReceipt = async (req, res, next) => {
     doc.fontSize(12).text(`Order Number: ${sale.orderNumber}`);
     doc.text(`Date: ${new Date(sale.createdAt).toLocaleString()}`);
     doc.text(`Pharmacist: ${sale.pharmacist.firstName} ${sale.pharmacist.lastName}`);
-    doc.moveDown();
-
-    doc.text('Customer Information:');
-    doc.fontSize(10);
-    doc.text(`Name: ${sale.customer.name}`);
-    doc.text(`Phone: ${sale.customer.phone}`);
-    if (sale.customer.email) doc.text(`Email: ${sale.customer.email}`);
     doc.moveDown();
 
     doc.fontSize(12).text('Items:');

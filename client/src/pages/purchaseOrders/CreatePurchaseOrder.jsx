@@ -109,7 +109,7 @@ const CreatePurchaseOrder = () => {
       };
 
       const response = await api.post('/purchase-orders', payload);
-      toast.success('Purchase order created');
+      toast.success('Medicine order created');
       navigate(`/purchase-orders/${response.data.data.purchaseOrder._id}`);
     } catch (error) {
       toast.error(error.response?.data?.error?.message || 'Failed to create PO');
@@ -120,7 +120,7 @@ const CreatePurchaseOrder = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold text-gray-900">Create Purchase Order</h1>
+      <h1 className="text-3xl font-bold text-gray-900">Order Medicines</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Supplier & Details */}
@@ -269,7 +269,7 @@ const CreatePurchaseOrder = () => {
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => navigate('/purchase-orders')} className="btn btn-secondary">Cancel</button>
           <button type="submit" disabled={loading} className="btn btn-primary">
-            {loading ? 'Creating...' : 'Create Purchase Order'}
+            {loading ? 'Creating...' : 'Place Medicine Order'}
           </button>
         </div>
       </form>

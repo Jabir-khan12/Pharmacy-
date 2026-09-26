@@ -19,6 +19,7 @@ import supplierRoutes from './src/routes/supplierRoutes.js';
 import purchaseOrderRoutes from './src/routes/purchaseOrderRoutes.js';
 import exportRoutes from './src/routes/exportRoutes.js';
 import batchRoutes from './src/routes/batchRoutes.js';
+import accountingRoutes from './src/routes/accountingRoutes.js';
 
 import errorHandler from './src/middleware/errorHandler.js';
 import { authLimiter, apiLimiter } from './src/middleware/rateLimiter.js';
@@ -74,6 +75,7 @@ app.use('/api/suppliers', supplierRoutes);
 app.use('/api/purchase-orders', purchaseOrderRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/batches', batchRoutes);
+app.use('/api/accounting', accountingRoutes);
 
 app.get('/api/health', (req, res) => {
   res.status(200).json({

@@ -2,7 +2,7 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { 
   Home, Package, ShoppingCart, RotateCcw, FileText, 
-  BarChart3, Users, User, Bell, LogOut, Menu, X, Truck, ClipboardList 
+  BarChart3, Users, User, Bell, LogOut, Menu, X, Truck, ClipboardList, BookOpen, Layers
 } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import api from '../../config/api';
@@ -79,8 +79,10 @@ const DashboardLayout = () => {
     { name: 'Returns', href: '/returns', icon: RotateCcw, roles: ['admin', 'pharmacist'] },
     { name: 'Prescriptions', href: '/prescriptions', icon: FileText, roles: ['admin', 'pharmacist', 'customer'] },
     { name: 'Reports', href: '/reports', icon: BarChart3, roles: ['admin', 'pharmacist'] },
+    { name: 'Accounting', href: '/accounting', icon: BookOpen, roles: ['admin'] },
     { name: 'Suppliers', href: '/suppliers', icon: Truck, roles: ['admin', 'pharmacist'] },
-    { name: 'Purchase Orders', href: '/purchase-orders', icon: ClipboardList, roles: ['admin', 'pharmacist'] },
+    { name: 'Medicine Orders', href: '/purchase-orders', icon: ClipboardList, roles: ['admin', 'pharmacist'] },
+    { name: 'Batches', href: '/batches', icon: Layers, roles: ['admin', 'pharmacist'] },
     { name: 'Users', href: '/users', icon: Users, roles: ['admin'] },
   ];
 
@@ -96,7 +98,7 @@ const DashboardLayout = () => {
         w-64 bg-white shadow-lg
       `}>
         <div className="flex items-center justify-between h-16 px-6 border-b">
-          <h1 className="text-xl font-bold text-primary-600">PharmaCare</h1>
+          <h1 className="text-xl font-bold tracking-normal text-primary-600">PharmaCare Pro</h1>
           <button onClick={() => setSidebarOpen(false)} className="md:hidden">
             <X className="w-6 h-6" />
           </button>

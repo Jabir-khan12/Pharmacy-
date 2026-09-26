@@ -29,6 +29,8 @@ import PurchaseOrderList from './pages/purchaseOrders/PurchaseOrderList';
 import CreatePurchaseOrder from './pages/purchaseOrders/CreatePurchaseOrder';
 import PurchaseOrderDetail from './pages/purchaseOrders/PurchaseOrderDetail';
 import NotFound from './pages/NotFound';
+import Accounting from './pages/Accounting';
+import BatchesList from './pages/BatchesList';
 
 // Protected Route Component
 const ProtectedRoute = ({ children, roles }) => {
@@ -94,6 +96,8 @@ function App() {
         
         {/* Reports */}
         <Route path="reports" element={<ProtectedRoute roles={['admin', 'pharmacist']}><Reports /></ProtectedRoute>} />
+        <Route path="accounting" element={<ProtectedRoute roles={['admin']}><Accounting /></ProtectedRoute>} />
+        <Route path="batches" element={<ProtectedRoute roles={['admin', 'pharmacist']}><BatchesList /></ProtectedRoute>} />
         
         {/* User Management */}
         <Route path="users" element={<ProtectedRoute roles={['admin']}><UsersList /></ProtectedRoute>} />

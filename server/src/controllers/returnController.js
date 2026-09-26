@@ -5,7 +5,7 @@ import { createReturnTransaction, approveReturnTransaction } from '../services/r
 
 export const createReturn = async (req, res, next) => {
   try {
-    const { originalSale, items } = req.body;
+    const { originalSale, items, returnFeeRate = 0 } = req.body;
 
     if (!items || items.length === 0) {
       return next(new AppError('Return must contain at least one item', 400));
@@ -39,7 +39,15 @@ export const createReturn = async (req, res, next) => {
       });
     }
 
-    const returnData = { originalSale, items: processedItems, refundAmount };
+    const feeRate = Number(returnFeeRate) || 0;
+    const returnFeeAmount = Math.round(refundAmount * feeRate) / 100;
+    const returnData = {
+      originalSale,
+      items: processedItems,
+      refundAmount: Math.round((refundAmount - returnFeeAmount) * 100) / 100,
+      returnFeeRate: feeRate,
+      returnFeeAmount
+    };
 
     const returnDoc = await createReturnTransaction(returnData, req.user._id);
 

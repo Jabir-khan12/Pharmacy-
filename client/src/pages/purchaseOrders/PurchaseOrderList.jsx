@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import { Plus, ClipboardList } from 'lucide-react';
@@ -17,6 +17,12 @@ const PurchaseOrderList = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    setStatusFilter(searchParams.get('status') || '');
+    setPagination((previous) => ({ ...previous, page: 1 }));
+  }, [searchParams]);
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -28,7 +34,7 @@ const PurchaseOrderList = () => {
       setOrders(response.data.data.purchaseOrders);
       setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
     } catch {
-      toast.error('Failed to fetch purchase orders');
+      toast.error('Failed to load medicine orders');
     } finally {
       setLoading(false);
     }
@@ -41,7 +47,10 @@ const PurchaseOrderList = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Purchase Orders</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Medicine Orders</h1>
+          {statusFilter === 'ordered' && <p className="mt-1 text-sm text-gray-500">Showing orders awaiting delivery.</p>}
+        </div>
         <Link to="/purchase-orders/new" className="btn btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> New PO
         </Link>
@@ -53,11 +62,11 @@ const PurchaseOrderList = () => {
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
         >
-          <option value="">All statuses</option>
+          <option value="">All order statuses</option>
           <option value="draft">Draft</option>
           <option value="ordered">Ordered</option>
-          <option value="partially_received">Partially Received</option>
-          <option value="received">Received</option>
+          <option value="partially_received">Partly Received</option>
+          <option value="received">Received in Full</option>
           <option value="cancelled">Cancelled</option>
         </select>
       </div>
@@ -67,14 +76,20 @@ const PurchaseOrderList = () => {
       ) : orders.length === 0 ? (
         <div className="card text-center py-12">
           <ClipboardList className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-          <p className="text-gray-500">No purchase orders found</p>
+          <p className="text-gray-500">No medicine orders found</p>
+          <p className="mt-1 text-sm text-gray-500">Create a new purchase order to get started.</p>
+          <div className="mt-4">
+            <Link to="/purchase-orders/new" className="btn btn-primary inline-flex items-center gap-2">
+              <Plus className="w-4 h-4" /> New Order
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="card overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">PO Number</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order Number</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Total</th>

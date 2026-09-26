@@ -2,29 +2,33 @@ import Return from '../models/Return.js';
 import Sale from '../models/Sale.js';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import { updateStock } from './inventoryService.js';
+import { supportsTransactions, updateStock } from './inventoryService.js';
 
 export const createReturnTransaction = async (returnData, returnedBy) => {
-  const session = await mongoose.startSession();
+  const session = supportsTransactions() ? await mongoose.startSession() : null;
 
   try {
-    await session.startTransaction();
+    if (session) await session.startTransaction();
 
-    const originalSale = await Sale.findById(returnData.originalSale).session(session);
+    const saleQuery = Sale.findById(returnData.originalSale);
+    const originalSale = session ? await saleQuery.session(session) : await saleQuery;
 
     if (!originalSale) {
       throw new AppError('Original sale not found', 404);
     }
 
     // Get all existing approved/pending returns for this sale to check cumulative quantities
-    const existingReturns = await Return.find({
+    const existingReturnsQuery = Return.find({
       originalSale: returnData.originalSale,
       status: { $in: ['approved', 'pending'] }
-    }).session(session);
+    });
+    const existingReturnDocs = session
+      ? await existingReturnsQuery.session(session)
+      : await existingReturnsQuery;
 
     // Build map of already-returned quantities per medicine
     const returnedQuantities = {};
-    for (const ret of existingReturns) {
+    for (const ret of existingReturnDocs) {
       for (const item of ret.items) {
         const medId = item.medicine.toString();
         returnedQuantities[medId] = (returnedQuantities[medId] || 0) + item.quantity;
@@ -56,25 +60,26 @@ export const createReturnTransaction = async (returnData, returnedBy) => {
       returnedBy
     });
 
-    await returnDoc.save({ session });
+    await returnDoc.save(session ? { session } : undefined);
 
-    await session.commitTransaction();
+    if (session) await session.commitTransaction();
     return returnDoc;
   } catch (error) {
-    await session.abortTransaction();
+    if (session) await session.abortTransaction();
     throw error;
   } finally {
-    session.endSession();
+    if (session) session.endSession();
   }
 };
 
 export const approveReturnTransaction = async (returnId, approvedBy, approvalNotes) => {
-  const session = await mongoose.startSession();
+  const session = supportsTransactions() ? await mongoose.startSession() : null;
 
   try {
-    await session.startTransaction();
+    if (session) await session.startTransaction();
 
-    const returnDoc = await Return.findById(returnId).session(session);
+    const returnQuery = Return.findById(returnId);
+    const returnDoc = session ? await returnQuery.session(session) : await returnQuery;
 
     if (!returnDoc) {
       throw new AppError('Return not found', 404);
@@ -103,19 +108,23 @@ export const approveReturnTransaction = async (returnId, approvedBy, approvalNot
     returnDoc.approvedBy = approvedBy;
     returnDoc.approvedAt = new Date();
     returnDoc.approvalNotes = approvalNotes || '';
-    await returnDoc.save({ session });
+    await returnDoc.save(session ? { session } : undefined);
 
-    const originalSale = await Sale.findById(returnDoc.originalSale).session(session);
+    const originalSaleQuery = Sale.findById(returnDoc.originalSale);
+    const originalSale = session ? await originalSaleQuery.session(session) : await originalSaleQuery;
     if (originalSale) {
       // Get ALL approved returns for this sale (including current one)
-      const allApprovedReturns = await Return.find({
+      const allApprovedReturnsQuery = Return.find({
         originalSale: returnDoc.originalSale,
         status: 'approved'
-      }).session(session);
+      });
+      const approvedReturnDocs = session
+        ? await allApprovedReturnsQuery.session(session)
+        : await allApprovedReturnsQuery;
 
       // Build total returned quantities per medicine
       const totalReturned = {};
-      for (const ret of allApprovedReturns) {
+      for (const ret of approvedReturnDocs) {
         for (const item of ret.items) {
           const medId = item.medicine.toString();
           totalReturned[medId] = (totalReturned[medId] || 0) + item.quantity;
@@ -135,15 +144,15 @@ export const approveReturnTransaction = async (returnId, approvedBy, approvalNot
       } else if (anyReturned) {
         originalSale.status = 'partially_returned';
       }
-      await originalSale.save({ session });
+      await originalSale.save(session ? { session } : undefined);
     }
 
-    await session.commitTransaction();
+    if (session) await session.commitTransaction();
     return returnDoc;
   } catch (error) {
-    await session.abortTransaction();
+    if (session) await session.abortTransaction();
     throw error;
   } finally {
-    session.endSession();
+    if (session) session.endSession();
   }
 };

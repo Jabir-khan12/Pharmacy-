@@ -29,8 +29,8 @@ const Login = () => {
     <div className="min-h-screen bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center p-4">
       <div className="card max-w-md w-full">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Pharmacy Management</h1>
-          <p className="text-gray-600">Sign in to your account</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">PharmaCare Pro</h1>
+          <p className="text-gray-600">Pharmacy operations platform</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

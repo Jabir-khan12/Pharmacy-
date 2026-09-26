@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../config/api';
 import { Search, Plus, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -12,7 +12,9 @@ const MedicineList = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [category, setCategory] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0 });
+  const [searchParams] = useSearchParams();
   const debouncedSearch = useDebounce(searchTerm, 300);
+  const dashboardFilter = searchParams.get('filter');
 
   const categories = [
     'All',
@@ -32,7 +34,7 @@ const MedicineList = () => {
 
   useEffect(() => {
     fetchMedicines();
-  }, [debouncedSearch, category, pagination.page]);
+  }, [debouncedSearch, category, dashboardFilter, pagination.page]);
 
   const fetchMedicines = async () => {
     try {
@@ -44,9 +46,21 @@ const MedicineList = () => {
         ...(category && category !== 'All' && { category })
       };
 
-      const response = await api.get('/medicines', { params });
-      setMedicines(response.data.data.medicines);
-      setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
+      if (dashboardFilter === 'low-stock') {
+        const response = await api.get('/medicines/low-stock');
+        const medicines = response.data.data.medicines || [];
+        setMedicines(medicines);
+        setPagination((previous) => ({ ...previous, page: 1, total: medicines.length, pages: 1 }));
+      } else if (dashboardFilter === 'expiring') {
+        const response = await api.get('/medicines/expiring', { params: { days: 30 } });
+        const medicines = response.data.data.medicines || [];
+        setMedicines(medicines);
+        setPagination((previous) => ({ ...previous, page: 1, total: medicines.length, pages: 1 }));
+      } else {
+        const response = await api.get('/medicines', { params });
+        setMedicines(response.data.data.medicines);
+        setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
+      }
     } catch (error) {
       toast.error('Failed to fetch medicines');
       console.error(error);
@@ -62,6 +76,20 @@ const MedicineList = () => {
       return { text: 'Low Stock', class: 'badge badge-warning' };
     }
     return { text: 'In Stock', class: 'badge badge-success' };
+  };
+
+  const urgencyColorClass = (days) => {
+    if (days <= 7) return 'bg-red-100 text-red-800';
+    if (days <= 30) return 'bg-orange-100 text-orange-800';
+    if (days <= 90) return 'bg-yellow-100 text-yellow-800';
+    return 'bg-gray-100 text-gray-700';
+  };
+
+  const urgencyLabel = (days) => {
+    if (days <= 7) return 'Critical';
+    if (days <= 30) return 'Urgent';
+    if (days <= 90) return 'Watch';
+    return 'Safe';
   };
 
   const getDaysUntilExpiry = (expiryDate) => {
@@ -120,12 +148,25 @@ const MedicineList = () => {
         </div>
       </div>
 
+      {dashboardFilter && (
+        <div className="flex items-center justify-between rounded-lg border border-primary-100 bg-primary-50 px-4 py-3 text-sm text-primary-900">
+          <span>{dashboardFilter === 'low-stock' ? 'Showing medicines at or below their reorder level.' : 'Showing medicines expiring within the next 30 days.'}</span>
+          <Link to="/medicines" className="font-medium text-primary-700 hover:underline">Clear filter</Link>
+        </div>
+      )}
+
       {/* Medicine List */}
       {loading ? (
         <div className="text-center py-12">Loading...</div>
       ) : medicines.length === 0 ? (
         <div className="card text-center py-12">
           <p className="text-gray-500">No medicines found</p>
+          <p className="text-sm mt-1 text-gray-400">Get started by adding a new medicine.</p>
+          <div className="mt-4">
+            <Link to="/medicines/new" className="btn btn-primary inline-flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Add Medicine
+            </Link>
+          </div>
         </div>
       ) : (
         <div className="card overflow-x-auto">
@@ -145,7 +186,9 @@ const MedicineList = () => {
               {medicines.map((medicine) => {
                 const stockStatus = getStockStatus(medicine);
                 const daysUntilExpiry = getDaysUntilExpiry(medicine.expiryDate);
-                
+                const urgencyCls = urgencyColorClass(daysUntilExpiry);
+                const urgencyLbl = urgencyLabel(daysUntilExpiry);
+
                 return (
                   <tr key={medicine._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
@@ -163,11 +206,9 @@ const MedicineList = () => {
                     <td className="px-6 py-4 text-sm text-gray-900">₹{medicine.price.toFixed(2)}</td>
                     <td className="px-6 py-4">
                       <div className="text-sm">
-                        <p className={daysUntilExpiry <= 30 ? 'text-red-600' : 'text-gray-600'}>
-                          {new Date(medicine.expiryDate).toLocaleDateString()}
-                        </p>
-                        {daysUntilExpiry <= 30 && (
-                          <p className="text-xs text-red-500">{daysUntilExpiry} days left</p>
+                        <p className={urgencyCls}>{urgencyLbl}: {new Date(medicine.expiryDate).toLocaleDateString()}</p>
+                        {daysUntilExpiry <= 90 && (
+                          <p className="text-xs font-medium">{daysUntilExpiry} days remaining</p>
                         )}
                       </div>
                     </td>

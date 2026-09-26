@@ -2,7 +2,8 @@ import PurchaseOrder from '../models/PurchaseOrder.js';
 import Medicine from '../models/Medicine.js';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import { updateStock } from '../services/inventoryService.js';
+import { supportsTransactions, updateStock } from '../services/inventoryService.js';
+import SupplierTransaction from '../models/SupplierTransaction.js';
 
 export const createPurchaseOrder = async (req, res, next) => {
   try {
@@ -150,13 +151,14 @@ export const updatePurchaseOrderStatus = async (req, res, next) => {
 };
 
 export const receivePurchaseOrder = async (req, res, next) => {
-  const session = await mongoose.startSession();
+  const session = supportsTransactions() ? await mongoose.startSession() : null;
 
   try {
-    await session.startTransaction();
+    if (session) await session.startTransaction();
 
     const { receivedItems } = req.body;
-    const po = await PurchaseOrder.findById(req.params.id).session(session);
+    const poQuery = PurchaseOrder.findById(req.params.id);
+    const po = session ? await poQuery.session(session) : await poQuery;
 
     if (!po) {
       throw new AppError('Purchase order not found', 404);
@@ -166,6 +168,7 @@ export const receivePurchaseOrder = async (req, res, next) => {
       throw new AppError('Purchase order cannot be received in current status', 400);
     }
 
+    let receivedValue = 0;
     for (const received of receivedItems) {
       const poItem = po.items.id(received.itemId);
       if (!poItem) {
@@ -181,6 +184,7 @@ export const receivePurchaseOrder = async (req, res, next) => {
       }
 
       poItem.receivedQuantity += received.quantity;
+      receivedValue += received.quantity * poItem.unitCost;
       if (received.batchNumber) poItem.batchNumber = received.batchNumber;
       if (received.expiryDate) poItem.expiryDate = received.expiryDate;
 
@@ -209,9 +213,19 @@ export const receivePurchaseOrder = async (req, res, next) => {
     }
 
     po.receivedBy = req.user._id;
-    await po.save({ session });
+    await po.save(session ? { session } : undefined);
 
-    await session.commitTransaction();
+    const transactionData = [{
+      supplier: po.supplier,
+      type: 'purchase',
+      amount: receivedValue,
+      purchaseOrder: po._id,
+      notes: `Received against ${po.poNumber}`,
+      createdBy: req.user._id
+    }];
+    await SupplierTransaction.create(transactionData, session ? { session } : undefined);
+
+    if (session) await session.commitTransaction();
 
     const populated = await PurchaseOrder.findById(po._id)
       .populate('supplier', 'name')
@@ -224,9 +238,9 @@ export const receivePurchaseOrder = async (req, res, next) => {
       data: { purchaseOrder: populated }
     });
   } catch (error) {
-    await session.abortTransaction();
+    if (session) await session.abortTransaction();
     next(error);
   } finally {
-    session.endSession();
+    if (session) session.endSession();
   }
 };

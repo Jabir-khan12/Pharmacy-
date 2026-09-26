@@ -5,6 +5,7 @@ export const createReturnSchema = {
     originalSale: Joi.string().required().messages({
       'any.required': 'Original sale ID is required'
     }),
+    returnFeeRate: Joi.number().min(0).max(100).default(0),
     items: Joi.array().items(
       Joi.object({
         medicine: Joi.string().required(),

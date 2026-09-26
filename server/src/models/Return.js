@@ -61,6 +61,17 @@ const returnSchema = new mongoose.Schema({
     required: true,
     min: [0, 'Refund amount cannot be negative']
   },
+  returnFeeRate: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  returnFeeAmount: {
+    type: Number,
+    min: 0,
+    default: 0
+  },
   status: {
     type: String,
     enum: ['pending', 'approved', 'rejected'],
@@ -84,7 +95,7 @@ const returnSchema = new mongoose.Schema({
 returnSchema.index({ originalSale: 1 });
 returnSchema.index({ status: 1, createdAt: -1 });
 
-returnSchema.pre('save', async function(next) {
+returnSchema.pre('validate', async function(next) {
   if (this.isNew && !this.returnNumber) {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');

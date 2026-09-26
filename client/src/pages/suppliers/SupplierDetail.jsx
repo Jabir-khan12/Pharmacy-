@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
-import { ArrowLeft, Edit, Truck } from 'lucide-react';
+import { ArrowLeft, Edit, Truck, CreditCard, PlusCircle } from 'lucide-react';
 
 const statusColors = {
   active: 'bg-green-100 text-green-700',
@@ -15,6 +15,9 @@ const SupplierDetail = () => {
   const navigate = useNavigate();
   const [supplier, setSupplier] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [account, setAccount] = useState(null);
+  const [payment, setPayment] = useState({ amount: '', paymentMethod: 'cash', notes: '' });
+  const [savingPayment, setSavingPayment] = useState(false);
 
   useEffect(() => {
     fetchSupplier();
@@ -25,11 +28,29 @@ const SupplierDetail = () => {
       setLoading(true);
       const response = await api.get(`/suppliers/${id}`);
       setSupplier(response.data.data.supplier);
+      const accountResponse = await api.get(`/suppliers/${id}/account`);
+      setAccount(accountResponse.data.data);
     } catch {
       toast.error('Failed to load supplier');
       navigate('/suppliers');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const recordPayment = async (event) => {
+    event.preventDefault();
+    if (!payment.amount || Number(payment.amount) <= 0) return;
+    try {
+      setSavingPayment(true);
+      await api.post(`/suppliers/${id}/payments`, { ...payment, amount: Number(payment.amount) });
+      toast.success('Supplier payment recorded');
+      setPayment({ amount: '', paymentMethod: 'cash', notes: '' });
+      fetchSupplier();
+    } catch (error) {
+      toast.error(error.response?.data?.error?.message || 'Failed to record payment');
+    } finally {
+      setSavingPayment(false);
     }
   };
 
@@ -110,6 +131,38 @@ const SupplierDetail = () => {
               <p className="text-sm mt-1">{supplier.notes}</p>
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><CreditCard className="h-5 w-5 text-primary-600" /> Supplier money record</h2>
+            <p className="text-sm text-gray-500">Purchases increase the payable balance. Payments reduce it.</p>
+          </div>
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Outstanding supplier loan</p>
+            <p className="text-2xl font-bold text-red-700">₹{(account?.summary?.balance || 0).toFixed(2)}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="rounded-lg bg-red-50 p-3"><p className="text-xs text-red-700">Purchases on account</p><p className="text-lg font-semibold">₹{(account?.summary?.purchases || 0).toFixed(2)}</p></div>
+          <div className="rounded-lg bg-green-50 p-3"><p className="text-xs text-green-700">Payments made</p><p className="text-lg font-semibold">₹{(account?.summary?.payments || 0).toFixed(2)}</p></div>
+          <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-500">Payment terms</p><p className="text-lg font-semibold capitalize">{supplier.paymentTerms?.replace('_', ' ')}</p></div>
+        </div>
+
+        {account?.summary?.balance > 0 && (
+          <form onSubmit={recordPayment} className="grid grid-cols-1 items-end gap-3 border-t pt-4 md:grid-cols-4">
+            <label className="text-sm font-medium text-gray-700">Payment amount<input type="number" min="0.01" max={account.summary.balance} step="0.01" className="input mt-1" value={payment.amount} onChange={(e) => setPayment({ ...payment, amount: e.target.value })} required /></label>
+            <label className="text-sm font-medium text-gray-700">Method<select className="input mt-1" value={payment.paymentMethod} onChange={(e) => setPayment({ ...payment, paymentMethod: e.target.value })}><option value="cash">Cash</option><option value="bank">Bank</option><option value="card">Card</option><option value="online">Online</option><option value="other">Other</option></select></label>
+            <label className="text-sm font-medium text-gray-700 md:col-span-1">Note<input className="input mt-1" placeholder="e.g. Weekly payment" value={payment.notes} onChange={(e) => setPayment({ ...payment, notes: e.target.value })} /></label>
+            <button type="submit" disabled={savingPayment} className="btn btn-primary flex items-center justify-center gap-2"><PlusCircle className="h-4 w-4" /> {savingPayment ? 'Saving...' : 'Record payment'}</button>
+          </form>
+        )}
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm"><thead className="border-b text-left text-xs uppercase text-gray-500"><tr><th className="py-2">Date</th><th>Type</th><th>Reference</th><th className="text-right">Amount</th></tr></thead><tbody className="divide-y">{account?.transactions?.map((transaction) => <tr key={transaction._id}><td className="py-2">{new Date(transaction.createdAt).toLocaleDateString()}</td><td className="capitalize">{transaction.type}</td><td>{transaction.purchaseOrder?.poNumber || transaction.notes || '—'}</td><td className={`text-right font-medium ${transaction.type === 'purchase' ? 'text-red-700' : 'text-green-700'}`}>{transaction.type === 'purchase' ? '+' : '-'}₹{transaction.amount.toFixed(2)}</td></tr>)}</tbody></table>
+          {!account?.transactions?.length && <p className="py-6 text-center text-sm text-gray-500">No money records yet. Receive a medicine order to record the amount owed.</p>}
         </div>
       </div>
     </div>

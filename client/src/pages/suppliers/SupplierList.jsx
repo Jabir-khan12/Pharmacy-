@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../config/api';
 import toast from 'react-hot-toast';
 import useDebounce from '../../hooks/useDebounce';
@@ -17,7 +17,10 @@ const SupplierList = () => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 1 });
+  const [outstandingBalances, setOutstandingBalances] = useState([]);
+  const [searchParams] = useSearchParams();
   const debouncedSearch = useDebounce(search, 300);
+  const outstandingView = searchParams.get('view') === 'outstanding';
 
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -26,15 +29,24 @@ const SupplierList = () => {
       if (debouncedSearch) params.search = debouncedSearch;
       if (statusFilter) params.status = statusFilter;
 
-      const response = await api.get('/suppliers', { params });
-      setSuppliers(response.data.data.suppliers);
-      setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
+      if (outstandingView) {
+        const response = await api.get('/reports/financial-overview');
+        const balances = (response.data.data.supplierBreakdown || []).filter((supplier) => supplier.balance > 0);
+        setOutstandingBalances(balances);
+        setSuppliers([]);
+        setPagination((previous) => ({ ...previous, page: 1, total: balances.length, pages: 1 }));
+      } else {
+        const response = await api.get('/suppliers', { params });
+        setSuppliers(response.data.data.suppliers);
+        setOutstandingBalances([]);
+        setPagination(prev => ({ ...prev, ...response.data.data.pagination }));
+      }
     } catch {
       toast.error('Failed to fetch suppliers');
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, statusFilter, pagination.page, pagination.limit]);
+  }, [debouncedSearch, statusFilter, outstandingView, pagination.page, pagination.limit]);
 
   useEffect(() => {
     fetchSuppliers();
@@ -43,13 +55,16 @@ const SupplierList = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Suppliers</h1>
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">{outstandingView ? 'Outstanding Supplier Balances' : 'Suppliers'}</h1>
+          {outstandingView && <p className="mt-1 text-sm text-gray-500">Suppliers with unpaid medicine purchases.</p>}
+        </div>
         <Link to="/suppliers/new" className="btn btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" /> Add Supplier
         </Link>
       </div>
 
-      <div className="card grid grid-cols-1 md:grid-cols-3 gap-4">
+      {!outstandingView && <div className="card grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="relative md:col-span-2">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -69,10 +84,29 @@ const SupplierList = () => {
           <option value="inactive">Inactive</option>
           <option value="blacklisted">Blacklisted</option>
         </select>
-      </div>
+      </div>}
+
+      {outstandingView && (
+        <div className="flex items-center justify-between rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-900">
+          <span>Outstanding balances are calculated from recorded supplier purchases and payments.</span>
+          <Link to="/suppliers" className="font-medium text-red-700 hover:underline">View all suppliers</Link>
+        </div>
+      )}
 
       {loading ? (
         <div className="text-center py-12">Loading...</div>
+      ) : outstandingView ? outstandingBalances.length === 0 ? (
+        <div className="card text-center py-12">
+          <p className="text-gray-500">No outstanding supplier balances.</p>
+          <p className="text-sm mt-1 text-gray-400">All supplier accounts are settled.</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50 border-b"><tr><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Supplier</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Outstanding balance</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Oldest unpaid PO</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due date</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th></tr></thead>
+            <tbody className="divide-y">{outstandingBalances.map((supplier) => { const poDate = supplier.oldestPurchaseOrder?.createdAt || supplier.oldestPurchaseDate; const poNumber = supplier.oldestPurchaseOrder?.poNumber || '—'; return <tr key={supplier.supplierId} className="hover:bg-gray-50"><td className="px-4 py-3 text-sm font-medium text-gray-900">{supplier.supplierName}</td><td className="px-4 py-3 text-right text-sm font-semibold text-red-700">₹{supplier.balance.toFixed(2)}</td><td className="px-4 py-3 text-sm">{poNumber}</td><td className="px-4 py-3 text-sm text-gray-600">{poDate ? new Date(poDate).toLocaleDateString() : '—'}</td><td className="px-4 py-3 text-right"><Link to={`/suppliers/${supplier.supplierId}`} className="text-sm font-medium text-primary-600 hover:underline">Pay / View</Link></td></tr>; })}</tbody>
+          </table>
+        </div>
       ) : suppliers.length === 0 ? (
         <div className="card text-center py-12">
           <Truck className="w-12 h-12 text-gray-300 mx-auto mb-3" />

@@ -3,16 +3,17 @@ import Medicine from '../models/Medicine.js';
 import Prescription from '../models/Prescription.js';
 import mongoose from 'mongoose';
 import AppError from '../utils/AppError.js';
-import { updateStock } from './inventoryService.js';
+import { supportsTransactions, updateStock } from './inventoryService.js';
 
 export const createSaleTransaction = async (saleData, pharmacistId) => {
-  const session = await mongoose.startSession();
+  const session = supportsTransactions() ? await mongoose.startSession() : null;
 
   try {
-    await session.startTransaction();
+    if (session) await session.startTransaction();
 
     for (const item of saleData.items) {
-      const medicine = await Medicine.findById(item.medicine).session(session);
+      const medicineQuery = Medicine.findById(item.medicine);
+      const medicine = session ? await medicineQuery.session(session) : await medicineQuery;
 
       if (!medicine) {
         throw new AppError(`Medicine with ID ${item.medicine} not found`, 404);
@@ -25,14 +26,11 @@ export const createSaleTransaction = async (saleData, pharmacistId) => {
       if (medicine.stockQuantity < item.quantity) {
         throw new AppError(`Insufficient stock for ${medicine.name}. Available: ${medicine.stockQuantity}`, 400);
       }
-
-      if (medicine.isPrescriptionRequired && !saleData.prescription) {
-        throw new AppError(`${medicine.name} requires a valid prescription`, 400);
-      }
     }
 
     if (saleData.prescription) {
-      const prescription = await Prescription.findById(saleData.prescription).session(session);
+      const prescriptionQuery = Prescription.findById(saleData.prescription);
+      const prescription = session ? await prescriptionQuery.session(session) : await prescriptionQuery;
 
       if (!prescription) {
         throw new AppError('Prescription not found', 404);
@@ -51,6 +49,7 @@ export const createSaleTransaction = async (saleData, pharmacistId) => {
       ...saleData,
       pharmacist: pharmacistId
     });
+    await sale.validate();
 
     for (const item of saleData.items) {
       await updateStock(
@@ -65,22 +64,22 @@ export const createSaleTransaction = async (saleData, pharmacistId) => {
       );
     }
 
-    await sale.save({ session });
+    await sale.save(session ? { session } : undefined);
 
     if (saleData.prescription) {
-      await Prescription.findByIdAndUpdate(
+        await Prescription.findByIdAndUpdate(
         saleData.prescription,
         { $set: { status: 'fulfilled' }, $push: { fulfilledSales: sale._id } },
-        { session }
+          session ? { session } : undefined
       );
     }
 
-    await session.commitTransaction();
+      if (session) await session.commitTransaction();
     return sale;
   } catch (error) {
-    await session.abortTransaction();
+      if (session) await session.abortTransaction();
     throw error;
   } finally {
-    session.endSession();
+      if (session) session.endSession();
   }
 };

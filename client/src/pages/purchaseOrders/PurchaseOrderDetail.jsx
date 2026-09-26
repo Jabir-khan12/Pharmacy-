@@ -43,7 +43,7 @@ const PurchaseOrderDetail = () => {
         }))
       );
     } catch {
-      toast.error('Failed to load purchase order');
+      toast.error('Failed to load medicine order');
       navigate('/purchase-orders');
     } finally {
       setLoading(false);
@@ -137,7 +137,7 @@ const PurchaseOrderDetail = () => {
           <div className="grid grid-cols-2 gap-2 text-sm">
             <p className="text-gray-500">Order Date:</p>
             <p>{new Date(po.orderDate || po.createdAt).toLocaleDateString()}</p>
-            <p className="text-gray-500">Expected:</p>
+            <p className="text-gray-500">Expected delivery:</p>
             <p>{po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString() : '—'}</p>
             <p className="text-gray-500">Created By:</p>
             <p>{po.createdBy?.firstName} {po.createdBy?.lastName}</p>
@@ -161,8 +161,8 @@ const PurchaseOrderDetail = () => {
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Medicine</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Ordered</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Received</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Unit Cost</th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Subtotal</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Cost each</th>
+              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Item total</th>
               <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Batch</th>
             </tr>
           </thead>

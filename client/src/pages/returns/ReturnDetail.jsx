@@ -74,7 +74,15 @@ const ReturnDetail = () => {
             <p className="font-medium capitalize">{returnDoc.status}</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Refund Amount</p>
+            <p className="text-sm text-gray-500">Items value before charge</p>
+            <p className="font-medium">₹{(returnDoc.refundAmount + (returnDoc.returnFeeAmount || 0)).toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Return charge</p>
+            <p className="font-medium text-red-700">{returnDoc.returnFeeRate || 0}% · -₹{(returnDoc.returnFeeAmount || 0).toFixed(2)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Customer refund</p>
             <p className="text-2xl font-bold">₹{returnDoc.refundAmount.toFixed(2)}</p>
           </div>
           <div>

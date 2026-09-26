@@ -20,6 +20,11 @@ const saleItemSchema = new mongoose.Schema({
     required: true,
     min: [0, 'Price cannot be negative']
   },
+  costAtSale: {
+    type: Number,
+    min: [0, 'Cost cannot be negative'],
+    default: null
+  },
   subtotal: {
     type: Number,
     required: true,
@@ -42,11 +47,11 @@ const saleSchema = new mongoose.Schema({
     },
     name: {
       type: String,
-      required: true
+      default: 'Walk-in customer'
     },
     phone: {
       type: String,
-      required: true
+      default: ''
     },
     email: String
   },
@@ -119,7 +124,7 @@ saleSchema.index({ pharmacist: 1, createdAt: -1 });
 saleSchema.index({ createdAt: -1 });
 saleSchema.index({ status: 1 });
 
-saleSchema.pre('save', async function(next) {
+saleSchema.pre('validate', async function(next) {
   if (this.isNew && !this.orderNumber) {
     const now = new Date();
     const dateStr = now.toISOString().split('T')[0].replace(/-/g, '');
